@@ -1,72 +1,56 @@
 from bs4 import BeautifulSoup
 import requests
 import re
+import pandas as pd
 from time import sleep
 
+# Define the URL to scrape
 URL = 'https://www.monster.fi/tyopaikat/haku/?q=data-analytics&where=Helsinki'
+
+# Send a GET request to the website
 page = requests.get(URL)
 soup = BeautifulSoup(page.text, 'html.parser')
-print(soup.prettify())
 
-# Correcting the issue with the regular expression
-num = sum(int(i) for i in re.findall(r'\d+', soup.find('h2', attrs={'class': 'figure'}).text))
-print('There are ' + str(num) + ' jobs found')
+# Try to find the element with the number of jobs
+num_jobs_element = soup.find('h2', attrs={'class': 'figure'})
 
-companies = []
-company = soup.findAll(name='div', attrs={'class': 'company'})
-if len(company) > 0:
-    for b in company:
-        companies.append(b.text.strip())
+# If the element is found, extract the number of jobs
+if num_jobs_element:
+    num = sum(int(i) for i in re.findall(r'\d+', num_jobs_element.text))
+    print(f'There are {num} jobs found')
+else:
+    print("Number of jobs not found on the page")
+
+# Extracting job data using find_all instead of the deprecated findAll
+companies = [company.text.strip() for company in soup.find_all(name='div', attrs={'class': 'company'})]
+locations = [location.text.strip() for location in soup.find_all(name='div', attrs={'class': 'location'})]
+titles = [title.text.strip() for title in soup.find_all(name='h2', attrs={'class': 'title'})]
+links = [a.find('a').attrs['href'] for a in soup.find_all(name='h2', attrs={'class': 'title'})]
+
+# Print extracted data for debugging
 print(companies)
-
-locations = []
-location = soup.findAll(name='div', attrs={'class': 'location'})
-if len(location) > 0:
-    for b in location:
-        locations.append(b.text.strip())
 print(locations)
-
-titles = []
-title = soup.findAll(name='h2', attrs={'class': 'title'})
-if len(title) > 0:
-    for b in title:
-        titles.append(b.text.strip())
 print(titles)
-
-links = []
-for a in title:
-    url = a.find('a').attrs['href']
-    links.append(url)
 print(links)
 
-# Fetch the job details from the specific job page
-job_page = requests.get('https://avoimettyopaikat.monster.fi/osa-aikainen-data-scientist-data-analyst-houston-analytics-helsinki-uusi-finland-academic-work/11/199503456')
-job_soup = BeautifulSoup(job_page.text, 'lxml')
-job_desc = job_soup.find('div', attrs={'id': 'JobDescription'}).text
-print(job_desc)
+# Combine the extracted data into a list of dictionaries
+job_data = []
+for title, company, location, link in zip(titles, companies, locations, links):
+    job_data.append({'Title': title, 'Company': company, 'Location': location, 'Link': link})
 
-def clean_text(text):
-    lines = (line.strip() for line in text.splitlines())  # break into lines
-    
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))  # break multi-headlines into a line each
-    
-    def chunk_space(chunk):
-        chunk_out = chunk + ' '  # Need to fix spacing issue
-        return chunk_out
-    
-    def remove_html_tags(text):
-        """Remove HTML tags from a string"""
-        import re
-        clean = re.compile('<.*?>')
-        return re.sub(clean, '', text)
-    
-    text = remove_html_tags(text)
+# Create a DataFrame from the job data
+df = pd.DataFrame(job_data)
 
-    text = ''.join(chunk_space(chunk) for chunk in chunks if chunk).encode('utf-8')  # Get rid of all blank lines and ends of line
+# Define the save path for the Excel file
+save_path = r"C:\Users\Niklas\Documents\Python\Job_Listings.xlsx"
 
-    # Now clean out all of the unicode junk (this line works great!!!)
+# Check if we have any data to save
+if not df.empty:
     try:
-        text = text.decode('unicode_escape').encode('ascii', 'ignore')  # Need this as some websites aren't formatted
-    except:  # in a way that this works, can occasionally throw an exception
-        return  # Handle cases where the text cannot be decoded properly
-    return text
+        # Save the DataFrame to an Excel file
+        df.to_excel(save_path, index=False)
+        print(f"Excel file created successfully at {save_path}")
+    except Exception as e:
+        print(f"Error saving Excel file: {e}")
+else:
+    print("No job data to save.")
