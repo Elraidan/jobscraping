@@ -24,4 +24,3 @@ Requests (requests)
 
 Regular expressions (re)
 
-## (Optional) lxml parser for better parsing performance
