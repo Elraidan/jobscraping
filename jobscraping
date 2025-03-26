@@ -1,45 +1,43 @@
 from bs4 import BeautifulSoup
 import requests
-import re
 import pandas as pd
-from time import sleep
+import re
 
 # Define the URL to scrape
-URL = 'https://www.monster.fi/tyopaikat/haku/?q=data-analytics&where=Helsinki'
+URL = 'https://www.jobly.fi/tyopaikat/tekniikka/uusimaa/kokopaivainen'
+
+# Set headers to mimic a real browser request
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+}
 
 # Send a GET request to the website
-page = requests.get(URL)
-soup = BeautifulSoup(page.text, 'html.parser')
+response = requests.get(URL, headers=HEADERS)
 
-# Try to find the element with the number of jobs
-num_jobs_element = soup.find('h2', attrs={'class': 'figure'})
+# Check if the request was successful
+if response.status_code != 200:
+    print(f"Failed to retrieve the page. Status Code: {response.status_code}")
+    exit()
 
-# If the element is found, extract the number of jobs
-if num_jobs_element:
-    num = sum(int(i) for i in re.findall(r'\d+', num_jobs_element.text))
-    print(f'There are {num} jobs found')
-else:
-    print("Number of jobs not found on the page")
+# Parse the HTML content
+soup = BeautifulSoup(response.text, 'html.parser')
 
-# Extracting job data using find_all instead of the deprecated findAll
-companies = [company.text.strip() for company in soup.find_all(name='div', attrs={'class': 'company'})]
-locations = [location.text.strip() for location in soup.find_all(name='div', attrs={'class': 'location'})]
-titles = [title.text.strip() for title in soup.find_all(name='h2', attrs={'class': 'title'})]
-links = [a.find('a').attrs['href'] for a in soup.find_all(name='h2', attrs={'class': 'title'})]
-
-# Print extracted data for debugging
-print(companies)
-print(locations)
-print(titles)
-print(links)
-
-# Combine the extracted data into a list of dictionaries
-job_data = []
-for title, company, location, link in zip(titles, companies, locations, links):
-    job_data.append({'Title': title, 'Company': company, 'Location': location, 'Link': link})
+# Extract job details
+jobs = []
+for job_element in soup.find_all('h2'):
+    title_elem = job_element.find('a', class_=re.compile(r'recruiter-job-link', re.I))
+    location_elem = job_element.find_next('div', class_=re.compile(r'location', re.I))
+    terms_elem = job_element.find_next('div', class_=re.compile(r'terms', re.I))
+    
+    title = title_elem.text.strip() if title_elem else 'N/A'
+    link = title_elem['href'] if title_elem and 'href' in title_elem.attrs else 'N/A'
+    location = location_elem.text.strip() if location_elem else 'N/A'
+    terms = terms_elem.text.strip() if terms_elem else 'N/A'
+    
+    jobs.append({'Title': title, 'Location': location, 'Terms': terms, 'Link': link})
 
 # Create a DataFrame from the job data
-df = pd.DataFrame(job_data)
+df = pd.DataFrame(jobs)
 
 # Define the save path for the Excel file
 save_path = r"C:\Users\Niklas\Documents\Python\Job_Listings.xlsx"
@@ -47,7 +45,6 @@ save_path = r"C:\Users\Niklas\Documents\Python\Job_Listings.xlsx"
 # Check if we have any data to save
 if not df.empty:
     try:
-        # Save the DataFrame to an Excel file
         df.to_excel(save_path, index=False)
         print(f"Excel file created successfully at {save_path}")
     except Exception as e:
